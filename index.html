@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Beechcraft 1900C — ATA 30 Thermodynamic Mission Analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#020617;--card:#0f172a;--card2:#1e293b;--line:#334155;
+  --text:#f1f5f9;--sub:#94a3b8;--blue:#38bdf8;--green:#10b981;
+  --orange:#f59e0b;--red:#ef4444;
+}
+body{background:linear-gradient(135deg,#020617,#0f172a);font-family:Segoe UI,Tahoma,sans-serif;color:var(--text);padding:20px}
+.container{max-width:1800px;margin:auto}
+.header{background:linear-gradient(90deg,#0f172a,#1e293b);padding:28px;border-radius:16px;border:1px solid var(--line);margin-bottom:25px}
+.header h1{font-size:2rem;color:var(--blue);letter-spacing:2px;margin-bottom:8px}
+.header p{color:var(--sub)}
+.selectors{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:25px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+label{display:block;margin-bottom:8px;color:var(--sub);font-size:.9rem}
+select{width:100%;padding:12px;border-radius:8px;background:#111827;border:1px solid var(--blue);color:white;font-size:1rem}
+.tabs{display:flex;gap:10px;margin-bottom:20px}
+.tab{flex:1;padding:14px;background:#1e293b;text-align:center;cursor:pointer;border-radius:10px;font-weight:bold;transition:.25s}
+.tab.active{background:var(--blue);color:#020617}
+.panel{display:none}.panel.active{display:block}
+.gridCharts{display:grid;grid-template-columns:repeat(auto-fit,minmax(500px,1fr));gap:20px}
+.chartBox{height:420px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px}
+table{width:100%;border-collapse:collapse;margin-top:15px;font-size:.85rem}
+th,td{border:1px solid var(--line);padding:10px;text-align:center}
+th{background:#1e293b;color:var(--blue)}
+.formula{background:#000;padding:4px 10px;border-radius:6px;font-family:monospace;color:var(--blue);display:inline-block;margin-top:5px}
+.formulaCard{margin-bottom:20px}
+.formulaCard p{margin-top:10px;line-height:1.7;color:var(--sub)}
+.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:25px}
+.mc{background:#1e293b;border:1px solid var(--line);border-radius:12px;padding:16px}
+.mc .lbl{font-size:.8rem;color:var(--sub);margin-bottom:6px}
+.mc .val{font-size:1.6rem;font-weight:bold;color:var(--blue)}
+.mc .unit{font-size:.8rem;color:var(--sub);margin-left:4px}
+.brayton-eval{padding:14px;border-radius:10px;margin-bottom:14px;font-size:.9rem;line-height:1.7}
+.brayton-ok{background:rgba(16,185,129,0.12);color:#10b981;border:1px solid #10b981}
+.brayton-partial{background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid #f59e0b}
+.check-row{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+.check-icon{font-size:1.2rem;flex-shrink:0}
+.check-title{font-size:.9rem;font-weight:600;color:var(--text)}
+.check-note{font-size:.8rem;color:var(--sub);margin-top:3px}
+@media(max-width:1100px){.selectors{grid-template-columns:1fr}.metric-grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <h1>Beechcraft 1900C — ATA 30</h1>
+  <p>TERMODINAMICA</p>
+</div>
+
+<div class="selectors">
+  <div class="card">
+    <label>AEROPUERTO ORIGEN</label>
+    <select id="origin" onchange="run()">
+      <option value="BOG">BOG — Bogotá — 8660 ft</option>
+      <option value="MDE">MDE — Medellín — 6955 ft</option>
+      <option value="BAQ">BAQ — Barranquilla — 98 ft</option>
+      <option value="CLO">CLO — Cali — 3162 ft</option>
+      <option value="IPI">IPI — Ipiales — 9711 ft</option>
+      <option value="ADZ">ADZ — San Andrés — 19 ft</option>
+    </select>
+  </div>
+  <div class="card">
+    <label>AEROPUERTO DESTINO</label>
+    <select id="dest" onchange="run()">
+      <option value="PEI">PEI — Pereira — 4416 ft</option>
+      <option value="BOG">BOG — Bogotá — 8660 ft</option>
+      <option value="UIB">UIB — Quibdó — 177 ft</option>
+      <option value="LET">LET — Leticia — 315 ft</option>
+      <option value="CLO">CLO — Cali — 3162 ft</option>
+    </select>
+  </div>
+  <div class="card">
+    <label>MODO ANÁLISIS</label>
+    <select id="mode" onchange="run()">
+      <option value="ideal">Ideal (sin pérdidas)</option>
+      <option value="real" selected>Real (con pérdidas)</option>
+    </select>
+  </div>
+</div>
+
+<div class="metric-grid" id="metrics"></div>
+
+<div class="tabs">
+  <div class="tab active" onclick="setTab('graphs',this)">GRÁFICAS</div>
+  <div class="tab" onclick="setTab('brayton',this)">ANÁLISIS BRAYTON</div>
+  <div class="tab" onclick="setTab('table',this)">TABLA TERMODINÁMICA</div>
+  <div class="tab" onclick="setTab('formulas',this)">FÓRMULAS</div>
+</div>
+
+<!-- GRÁFICAS -->
+<div id="graphs" class="panel active">
+  <div class="gridCharts">
+    <div class="chartBox"><canvas id="cT"></canvas></div>
+    <div class="chartBox"><canvas id="cP"></canvas></div>
+    <div class="chartBox"><canvas id="cTS"></canvas></div>
+    <div class="chartBox"><canvas id="cPV"></canvas></div>
+    <div class="chartBox"><canvas id="cH"></canvas></div>
+    <div class="chartBox"><canvas id="cU"></canvas></div>
+    <div class="chartBox"><canvas id="cS"></canvas></div>
+    <div class="chartBox"><canvas id="cWQ"></canvas></div>
+    <div class="chartBox"><canvas id="cEta"></canvas></div>
+    <div class="chartBox"><canvas id="cLoss"></canvas></div>
+  </div>
+</div>
+
+<!-- BRAYTON -->
+<div id="brayton" class="panel">
+  <div class="card" style="margin-bottom:20px">
+    <h2 style="color:var(--blue);margin-bottom:14px">¿El sistema sigue un ciclo Brayton?</h2>
+    <div id="braytonEval"></div>
+  </div>
+  <div class="gridCharts" style="grid-template-columns:1fr 1fr">
+    <div class="chartBox"><canvas id="cRp"></canvas></div>
+    <div class="chartBox"><canvas id="cEtaCmp"></canvas></div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <h2 style="color:var(--blue);margin-bottom:14px">Pérdidas por componente</h2>
+    <div id="lossTable"></div>
+  </div>
+</div>
+
+<!-- TABLA -->
+<div id="table" class="panel">
+  <div class="card">
+    <h2 style="margin-bottom:10px;color:var(--blue)">Tabla Termodinámica Completa</h2>
+    <table>
+      <thead><tr>
+        <th>Ruta</th><th>Etapa</th><th>P (kPa)</th><th>T (K)</th><th>v (m³/kg)</th>
+        <th>u (kJ/kg)</th><th>h (kJ/kg)</th><th>s (kJ/kg·K)</th>
+        <th>Q (kJ/kg)</th><th>W (kJ/kg)</th><th>η (%)</th>
+      </tr></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- FÓRMULAS -->
+<div id="formulas" class="panel">
+  <div class="card formulaCard">
+    <h2 style="color:var(--blue)">Fórmulas utilizadas</h2>
+    <p>Atmósfera ISA:<br><span class="formula">T = 288.15 − 0.0065·h  ;  P = 101.325·(T/288.15)^5.2561</span></p>
+    <p>Volumen específico:<br><span class="formula">v = R·T / P</span></p>
+    <p>Entalpía:<br><span class="formula">h = Cp·T</span></p>
+    <p>Energía interna:<br><span class="formula">u = Cv·T</span></p>
+    <p>Entropía:<br><span class="formula">Δs = Cp ln(T₂/T₁) − R ln(P₂/P₁)</span></p>
+    <p>Trabajo:<br><span class="formula">W = P(v₂−v₁)</span></p>
+    <p>Calor:<br><span class="formula">Q = Cp(T₂−T₁)</span></p>
+    <p>Expansión adiabática (ideal):<br><span class="formula">T₂ = T₁(P₂/P₁)^((γ−1)/γ)</span></p>
+    <p>Expansión politrópica (real):<br><span class="formula">T₂r = T₁(P₂/P₁)^((n−1)/n)  n=1.35</span></p>
+    <p>Primera ley:<br><span class="formula">ΔU = Q − W</span></p>
+    <p>Eficiencia térmica:<br><span class="formula">η = W/Q</span></p>
+    <p>Eficiencia Brayton ideal:<br><span class="formula">η_B = 1 − r_p^[(1−γ)/γ]</span></p>
+    <p>Pérdida de presión relativa:<br><span class="formula">ΔP% = (P_in − P_out) / P_in × 100</span></p>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<script>
+const ALT={BOG:8660,MDE:6955,BAQ:98,CLO:3162,IPI:9711,ADZ:19,PEI:4416,UIB:177,LET:315};
+const CHARTS={};
+const LBLS=["Ambiente","Bleed PT6A","Regulación","Boot inboard","Boot outboard","Stabilizer"];
+const C1='#38bdf8', C2='#10b981', C3='#f59e0b', C4='#ef4444';
+
+function isa(ft){
+  const h=ft*0.3048;
+  let T,P;
+  if(h<=11000){T=288.15-0.0065*h;P=101.325*Math.pow(T/288.15,5.2561);}
+  else{T=216.65;P=22.632*Math.exp(-0.1577*(h-11000)/1000);}
+  return{T,P,v:0.287*T/P};
+}
+
+function solve(ft,real){
+  const Cp=1.005,Cv=0.718,R=0.287,g=1.4,n=real?1.35:g;
+  const atm=isa(ft);
+  const T1=atm.T,P1=atm.P;
+  const stages=[];
+  const push=(nm,P,T,W,Q)=>{
+    const v=R*T/P,h=Cp*T,u=Cv*T;
+    const sp=stages.length?stages[stages.length-1].s:0;
+    const Tp=stages.length?stages[stages.length-1].T:T1;
+    const Pp=stages.length?stages[stages.length-1].P:P1;
+    const s=sp+Cp*Math.log(T/Tp)-R*Math.log(P/Pp);
+    const eta=Q!==0?(Math.abs(W)/Math.abs(Q)*100):null;
+    stages.push({nm,P,T,v,h,u,s,W,Q,eta});
+  };
+  push("Ambiente",P1,T1,0,0);
+  const P2=241,T2=493,W12=Cp*(T2-T1);
+  push("Bleed PT6A",P2,T2,W12,0);
+  const P3=124,T3=T2*Math.pow(P3/P2,((n-1)/n)),P3r=real?P3*0.97:P3,W23=Cp*(T2-T3);
+  push("Regulación",P3r,T3,W23,0);
+  const T4=T3-(real?10:8),dP3=real?P3r*0.98:P3r,W34=105*(real?0.92:1),Q34=Cp*(T4-T3)+W34;
+  push("Boot inboard",dP3,T4,W34,Q34);
+  const T5=T4-(real?12:10),dP4=real?dP3*0.97:dP3,W45=92*(real?0.90:1),Q45=Cp*(T5-T4)+W45;
+  push("Boot outboard",dP4,T5,W45,Q45);
+  const T6=T5-(real?11:9),dP5=real?dP4*0.96:dP4,W56=80*(real?0.88:1),Q56=Cp*(T6-T5)+W56;
+  push("Stabilizer",dP5,T6,W56,Q56);
+  return stages;
+}
+
+function rpArr(s){return s.map((x,i)=>i===0?1:+(x.P/s[i-1].P).toFixed(3));}
+
+function lineDs(label,data,color,dash,width){
+  return{label,data,borderColor:color,backgroundColor:color,
+    pointBackgroundColor:color,borderDash:dash||[],
+    tension:0.35,fill:false,pointRadius:4,pointHoverRadius:7,
+    borderWidth:width||2,pointStyle:'circle'};
+}
+
+function scatDs(label,data,color,dash){
+  return{label,data,borderColor:color,backgroundColor:color,
+    showLine:true,tension:0.35,pointRadius:5,pointHoverRadius:7,
+    borderDash:dash||[],borderWidth:2};
+}
+
+const scOpts=(yl)=>({
+  x:{ticks:{color:'#94a3b8',font:{size:11}},grid:{color:'rgba(148,163,184,0.15)'},
+     title:{display:true,text:'Etapas',color:'#94a3b8',font:{size:11}}},
+  y:{ticks:{color:'#94a3b8',font:{size:11}},grid:{color:'rgba(148,163,184,0.15)'},
+     title:{display:true,text:yl,color:'#94a3b8',font:{size:11}}}
+});
+
+const scXY=(xl,yl)=>({
+  x:{type:'linear',ticks:{color:'#94a3b8',font:{size:11}},grid:{color:'rgba(148,163,184,0.15)'},
+     title:{display:true,text:xl,color:'#94a3b8',font:{size:11}}},
+  y:{ticks:{color:'#94a3b8',font:{size:11}},grid:{color:'rgba(148,163,184,0.15)'},
+     title:{display:true,text:yl,color:'#94a3b8',font:{size:11}}}
+});
+
+function mkChart(id,type,data,extra){
+  if(CHARTS[id])CHARTS[id].destroy();
+  CHARTS[id]=new Chart(document.getElementById(id),{type,data,
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#94a3b8',font:{size:11},boxWidth:12,usePointStyle:true}},
+               title:{display:false}},
+      ...extra}});
+}
+
+let ORI=[],DES=[];
+
+function run(){
+  const real=document.getElementById('mode').value==='real';
+  ORI=solve(ALT[document.getElementById('origin').value],real);
+  DES=solve(ALT[document.getElementById('dest').value],real);
+  renderMetrics();
+  renderCharts();
+  renderBrayton(real);
+  renderTable();
+}
+
+function renderMetrics(){
+  const rp=ORI[1].P/ORI[0].P;
+  const etaB=(1-Math.pow(rp,(1-1.4)/1.4))*100;
+  const Wt=ORI.reduce((a,s)=>a+s.W,0);
+  const Pl=(ORI[0].P-ORI[ORI.length-1].P)/ORI[0].P*100;
+  document.getElementById('metrics').innerHTML=[
+    {l:"Trabajo neto origen",v:Wt.toFixed(1),u:"kJ/kg"},
+    {l:"Relación de presiones",v:rp.toFixed(1),u:"r_p"},
+    {l:"Eficiencia Brayton ideal",v:etaB.toFixed(1),u:"%"},
+    {l:"Caída P total",v:Pl.toFixed(1),u:"%"},
+  ].map(x=>`<div class="mc"><div class="lbl">${x.l}</div><div class="val">${x.v}<span class="unit">${x.u}</span></div></div>`).join('');
+}
+
+function renderCharts(){
+  const g=(arr,k,d)=>arr.map(s=>+(s[k].toFixed(d||1)));
+
+  mkChart('cT','line',{labels:LBLS,datasets:[
+    lineDs('Origen',g(ORI,'T'),C1),
+    lineDs('Destino',g(DES,'T'),C2,[6,4])
+  ]},{scales:scOpts('T [K]')});
+
+  mkChart('cP','line',{labels:LBLS,datasets:[
+    lineDs('Origen',g(ORI,'P'),C1),
+    lineDs('Destino',g(DES,'P'),C2,[6,4])
+  ]},{scales:scOpts('P [kPa]')});
+
+  mkChart('cTS','scatter',{datasets:[
+    scatDs('Origen',ORI.map(s=>({x:+s.s.toFixed(4),y:+s.T.toFixed(1)})),C1),
+    scatDs('Destino',DES.map(s=>({x:+s.s.toFixed(4),y:+s.T.toFixed(1)})),C2,[6,4])
+  ]},{scales:scXY('s [kJ/kg·K]','T [K]')});
+
+  mkChart('cPV','scatter',{datasets:[
+    scatDs('Origen',ORI.map(s=>({x:+s.v.toFixed(5),y:+s.P.toFixed(1)})),C1),
+    scatDs('Destino',DES.map(s=>({x:+s.v.toFixed(5),y:+s.P.toFixed(1)})),C2,[6,4])
+  ]},{scales:scXY('v [m³/kg]','P [kPa]')});
+
+  mkChart('cH','line',{labels:LBLS,datasets:[
+    lineDs('Origen',g(ORI,'h'),C1),
+    lineDs('Destino',g(DES,'h'),C2,[6,4])
+  ]},{scales:scOpts('h [kJ/kg]')});
+
+  mkChart('cU','line',{labels:LBLS,datasets:[
+    lineDs('Origen',g(ORI,'u'),C1),
+    lineDs('Destino',g(DES,'u'),C2,[6,4])
+  ]},{scales:scOpts('u [kJ/kg]')});
+
+  mkChart('cS','line',{labels:LBLS,datasets:[
+    lineDs('Origen',ORI.map(s=>+s.s.toFixed(4)),C1),
+    lineDs('Destino',DES.map(s=>+s.s.toFixed(4)),C2,[6,4])
+  ]},{scales:scOpts('s [kJ/kg·K]')});
+
+  mkChart('cWQ','line',{labels:LBLS,datasets:[
+    lineDs('Origen W',ORI.map(s=>+s.W.toFixed(1)),C1),
+    lineDs('Destino W',DES.map(s=>+s.W.toFixed(1)),C2,[6,4]),
+    lineDs('Origen Q',ORI.map(s=>+s.Q.toFixed(1)),C3,[],[2]),
+    lineDs('Destino Q',DES.map(s=>+s.Q.toFixed(1)),C4,[3,3],[2])
+  ]},{scales:scOpts('kJ/kg')});
+
+  const etaO=ORI.map(s=>s.eta!==null?+s.eta.toFixed(1):null);
+  const etaD=DES.map(s=>s.eta!==null?+s.eta.toFixed(1):null);
+  mkChart('cEta','line',{labels:LBLS,datasets:[
+    lineDs('Origen η%',etaO,C1),
+    lineDs('Destino η%',etaD,C2,[6,4])
+  ]},{scales:scOpts('η [%]')});
+
+  const plO=ORI.map((s,i)=>i===0?0:+((ORI[i-1].P-s.P)/ORI[i-1].P*100).toFixed(2));
+  const plD=DES.map((s,i)=>i===0?0:+((DES[i-1].P-s.P)/DES[i-1].P*100).toFixed(2));
+  mkChart('cLoss','line',{labels:LBLS,datasets:[
+    lineDs('Origen ΔP%',plO,C1),
+    lineDs('Destino ΔP%',plD,C2,[6,4])
+  ]},{scales:scOpts('% caída P')});
+}
+
+function renderBrayton(real){
+  const rpo=ORI[1].P/ORI[0].P,rpd=DES[1].P/DES[0].P;
+  const checks=[
+    {k:"¿Fluido de trabajo = gas (aire)?",ok:true,note:"Bleed air del PT6A es gas comprimido → cumple"},
+    {k:"¿Compresión adiabática (etapa 1→2)?",ok:true,note:`Q₁₂ = 0 → adiabático. η_c ≈ ${real?'91%':'100% ideal'}`},
+    {k:"¿Adición de calor a presión constante (etapa 2→3)?",ok:false,note:"P cae 241→124 kPa en el regulador: no es isobárico → diverge del Brayton ideal"},
+    {k:"¿Expansión adiabática (boots + stabilizer)?",ok:false,note:real?"Expansión politrópica n=1.35, irreversible, genera entropía":"Expansión aproximadamente adiabática"},
+    {k:"¿Ciclo cerrado?",ok:false,note:"Aire se expulsa al exterior: ciclo ABIERTO, similar al Brayton de turbina a gas real"},
+    {k:"¿Relación de presiones constante por ruta?",ok:false,note:`r_p origen=${rpo.toFixed(1)}, destino=${rpd.toFixed(1)} → varía con altitud`},
+  ];
+  const passed=checks.filter(c=>c.ok).length;
+  const isOk=passed>=4;
+  document.getElementById('braytonEval').innerHTML=`
+    <div class="brayton-eval ${isOk?'brayton-ok':'brayton-partial'}">${isOk?'Comportamiento mayormente acorde al ciclo Brayton real':'Comportamiento parcialmente Brayton — ciclo abierto con irreversibilidades reales'} (${passed}/${checks.length} criterios cumplidos)</div>
+    ${checks.map(c=>`<div class="check-row">
+      <span class="check-icon" style="color:${c.ok?'#10b981':'#f59e0b'}">${c.ok?'✓':'⚠'}</span>
+      <div><div class="check-title">${c.k}</div><div class="check-note">${c.note}</div></div>
+    </div>`).join('')}`;
+
+  mkChart('cRp','line',{labels:LBLS,datasets:[
+    lineDs('Origen r_p',rpArr(ORI),C1),
+    lineDs('Destino r_p',rpArr(DES),C2,[6,4])
+  ]},{scales:scOpts('r_p')});
+
+  mkChart('cEtaCmp','line',{labels:LBLS,datasets:[
+    lineDs('Origen η%',ORI.map(s=>s.eta!==null?+s.eta.toFixed(1):null),C1),
+    lineDs('Destino η%',DES.map(s=>s.eta!==null?+s.eta.toFixed(1):null),C2,[6,4])
+  ]},{scales:scOpts('η [%]')});
+
+  const comps=["Bleed PT6A","Regulación","Boot inboard","Boot outboard","Stabilizer"];
+  document.getElementById('lossTable').innerHTML=`<table>
+    <thead><tr><th>Componente</th><th>P_in kPa</th><th>P_out kPa</th><th>ΔP%</th>
+    <th>T_in K</th><th>T_out K</th><th>ΔT K</th><th>η etapa %</th><th>Proceso</th></tr></thead>
+    <tbody>${comps.map((c,i)=>{
+      const si=ORI[i],sf=ORI[i+1];
+      const dp=((si.P-sf.P)/si.P*100).toFixed(2);
+      const dt=(si.T-sf.T).toFixed(1);
+      const eta=sf.eta!==null?sf.eta.toFixed(1):'—';
+      const proc=i===0?'Compresión adiabática':i===1?'Expansión politrópica':'Expansión + trabajo mecánico';
+      return`<tr><td style="text-align:left;font-weight:600">${c}</td><td>${si.P.toFixed(1)}</td><td>${sf.P.toFixed(1)}</td>
+        <td style="color:${parseFloat(dp)>5?'#ef4444':parseFloat(dp)>2?'#f59e0b':'#10b981'}">${dp}%</td>
+        <td>${si.T.toFixed(1)}</td><td>${sf.T.toFixed(1)}</td><td>${dt}</td><td>${eta}</td>
+        <td style="font-size:.8rem;color:#94a3b8">${proc}</td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+function renderTable(){
+  const rows=(arr,lbl)=>arr.map(s=>`<tr>
+    <td style="font-weight:600">${lbl}</td><td>${s.nm}</td>
+    <td>${s.P.toFixed(2)}</td><td>${s.T.toFixed(2)}</td><td>${s.v.toFixed(4)}</td>
+    <td>${s.u.toFixed(2)}</td><td>${s.h.toFixed(2)}</td><td>${s.s.toFixed(4)}</td>
+    <td>${s.Q.toFixed(2)}</td><td>${s.W.toFixed(2)}</td>
+    <td>${s.eta!==null?s.eta.toFixed(1)+'%':'—'}</td>
+  </tr>`).join('');
+  document.getElementById('tableBody').innerHTML=rows(ORI,'ORIGEN')+rows(DES,'DESTINO');
+}
+
+function setTab(id,el){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+  setTimeout(()=>Object.values(CHARTS).forEach(c=>c&&c.resize()),50);
+}
+
+window.onload=run;
+</script>
+</body>
+</html>
